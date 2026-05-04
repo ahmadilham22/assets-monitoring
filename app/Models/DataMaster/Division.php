@@ -14,10 +14,10 @@ class Division extends Model
     protected $table = 'divisions';
     protected $fillable = [
         'kode_divisi',
-        'nama_divisi'
+        'nama_divisi',
     ];
 
-    public static function boot()
+    protected static function boot()
     {
         parent::boot();
 
@@ -28,11 +28,6 @@ class Division extends Model
 
     public function users(): HasMany
     {
-        return $this->hasMany(User::class, 'division_id');
-    }
-
-    public function fixedAssets(): HasMany
-    {
-        return $this->hasMany(FixedAsset::class, 'division_id', 'id');
+        return $this->hasMany(User::class, 'division_id', 'id');
     }
 }

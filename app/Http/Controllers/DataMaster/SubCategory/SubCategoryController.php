@@ -2,110 +2,93 @@
 
 namespace App\Http\Controllers\DataMaster\SubCategory;
 
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
-use Yajra\DataTables\DataTables;
-use App\Models\DataMaster\Category;
 use App\Http\Controllers\Controller;
-use App\Models\DataMaster\SubCategory;
-use Illuminate\Support\Facades\Validator;
-use App\Services\DataMaster\SubCategoryService;
-use App\Repositories\DataMaster\CategoryRepository;
 use App\Http\Requests\DataMaster\SubCategoryRequest;
-use App\Repositories\DataMaster\SubCategoryRepository;
+use App\Models\DataMaster\Category;
+use App\Models\DataMaster\SubCategory;
+use Yajra\DataTables\Facades\DataTables;
 
 class SubCategoryController extends Controller
 {
     public function index()
     {
         if (request()->ajax()) {
-            $data = SubCategory::with('category')->orderBy('updated_at', 'desc')->get();
-            return DataTables::of($data)
-                ->addColumn('action', function ($data) {
-                    return view('pages.data-master.sub-category._action.subCategoryAction', compact('data'));
-                })->addIndexColumn()->make(true);
+            $query = SubCategory::query()
+                ->with('category:id,nama_kategori')
+                ->orderBy('updated_at', 'desc');
+
+            return DataTables::eloquent($query)
+                ->addIndexColumn()
+                ->addColumn('action', function (SubCategory $subCategory) {
+                    return view('pages.data-master.sub-category._action.subCategoryAction', [
+                        'data' => $subCategory,
+                    ])->render();
+                })
+                ->rawColumns(['action'])
+                ->make(true);
         }
-        $data = Category::orderBy('nama_kategori')->get();
+
+        $data = Category::orderBy('nama_kategori')->get(['id', 'nama_kategori']);
+
         return view('pages.data-master.sub-category.index', compact('data'));
     }
-    public function store(Request $request)
+
+    public function store(SubCategoryRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'kode_sub_kategori' => [
-                'required',
-                'unique:sub_categories,kode_sub_kategori,NULL,id,deleted_at,NULL'
-            ],
-            'nama_sub_kategori' => 'required',
-        ], [
-            'kode_sub_kategori.required' => 'Kode Sub kategori wajib diisi',
-            'kode_sub_kategori.unique' => 'Kode Sub kategori sudah ada',
-            'nama_sub_kategori.required' => 'Nama Sub kategori wajib diisi',
+        $subCategory = SubCategory::create($request->validated());
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data berhasil ditambahkan',
+            'data' => $subCategory,
         ]);
-
-
-        if ($validator->fails()) {
-            return response()->json($validator->errors()->all(), 422);
-        }
-
-        // try {
-        $category = SubCategory::create([
-            'categories_id' => $request->categories_id,
-            'kode_sub_kategori' => $request->kode_sub_kategori,
-            'nama_sub_kategori' => $request->nama_sub_kategori,
-        ]);
-        return response()->json(['success' => true, 'message' => 'Data berhasil diperbarui', 'data' => $category]);
-        // } catch (\Illuminate\Database\QueryException $e) {
-        //     return response()->json(['error' => true, 'message' => 'Gagal memperbarui data', 'errors' => $e->getMessage()]);
-        // }
     }
+
     public function edit($id)
     {
-        $subcategory = SubCategory::find($id);
-        if ($subcategory) {
-            return response()->json(['success' => true, 'data' => $subcategory]);
-        } else {
-            return response()->json(['success' => true, 'message' => 'Tidak ditemukan']);
+        $subCategory = SubCategory::find($id);
+
+        if (! $subCategory) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data tidak ditemukan',
+            ], 404);
         }
+
+        return response()->json([
+            'success' => true,
+            'data' => $subCategory,
+        ]);
     }
 
-    public function update(Request $request, $id)
+    public function update(SubCategoryRequest $request, $id)
     {
-        $subcategoryId = $id;
-        $validator = Validator::make($request->all(), [
-            'kode_sub_kategori' => [
-                'required',
-                Rule::unique('sub_categories')->ignore($subcategoryId)
-            ],
-            'nama_sub_kategori' => 'required',
-        ], [
-            'kode_sub_kategori.required' => 'Kode kategori wajib diisi.',
-            'kode_sub_kategori.unique' => 'Kode kategori sudah ada.',
-            'nama_sub_kategori.required' => 'Nama kategori wajib diisi.',
+        $subCategory = SubCategory::findOrFail($id);
+        $subCategory->update($request->validated());
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data berhasil diperbarui',
+            'data' => $subCategory->refresh(),
         ]);
-
-        if ($validator->fails()) {
-            return response()->json(['error' => true, 'message' => $validator->errors()->first()]);
-        }
-
-        try {
-            $sub_category = SubCategory::findOrFail($subcategoryId);
-
-            $sub_category->categories_id = $request->input('categories_id');
-            $sub_category->kode_sub_kategori = $request->input('kode_sub_kategori');
-            $sub_category->nama_sub_kategori = $request->input('nama_sub_kategori');
-
-            $sub_category->update();
-
-            return response()->json(['success' => true, 'message' => 'Data berhasil diperbarui', 'data' => $sub_category]);
-        } catch (\Illuminate\Database\QueryException $e) {
-            return response()->json(['error' => true, 'message' => 'Gagal memperbarui data', 'errors' => $e->getMessage()]);
-        }
     }
 
     public function destroy($id)
     {
-        $sub_category = SubCategory::find($id);
-        $sub_category->delete();
-        return Response()->json(['data' => $sub_category, 'message' => 'Data Berhasil di Hapus']);
+        $subCategory = SubCategory::findOrFail($id);
+
+        if ($subCategory->fixedAssets()->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Sub kategori tidak bisa dihapus karena masih digunakan oleh aset tetap.',
+            ], 422);
+        }
+
+        $subCategory->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data berhasil dihapus',
+        ]);
     }
 }

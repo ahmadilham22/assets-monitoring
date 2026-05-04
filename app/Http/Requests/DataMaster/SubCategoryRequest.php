@@ -3,36 +3,41 @@
 namespace App\Http\Requests\DataMaster;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class SubCategoryRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
-     */
     public function rules(): array
     {
+        $subCategoryId = $this->route('id');
+
         return [
-            'categories_id' => 'required',
-            'kode_sub_kategori' => 'required|string',
-            'nama_sub_kategori' => 'required|string',
+            'categories_id' => ['required', 'integer', 'exists:categories,id'],
+            'kode_sub_kategori' => [
+                'required',
+                'string',
+                'max:50',
+                Rule::unique('sub_categories', 'kode_sub_kategori')
+                    ->ignore($subCategoryId)
+                    ->whereNull('deleted_at'),
+            ],
+            'nama_sub_kategori' => ['required', 'string', 'max:255'],
         ];
     }
 
-    public function messages()
+    public function messages(): array
     {
         return [
-            'kode_sub_kategori.required' => 'Kode kategori harus diisi',
-            'nama_sub_kategori.required' => 'Nama kategori harus diisi',
+            'categories_id.required' => 'Kategori induk wajib dipilih.',
+            'categories_id.exists' => 'Kategori induk tidak ditemukan.',
+            'kode_sub_kategori.required' => 'Kode sub kategori wajib diisi.',
+            'kode_sub_kategori.unique' => 'Kode sub kategori sudah digunakan.',
+            'nama_sub_kategori.required' => 'Nama sub kategori wajib diisi.',
         ];
     }
 }

@@ -56,12 +56,14 @@ class AssetImport implements ToModel, WithStartRow
     {
         $assetId = $row[7];
         $url = url("/data-assets/report/show/{$assetId}");
-        $qrCode = QrCode::format('png')
+
+        // SVG supaya tidak butuh imagick/GD extension
+        $qrCode = QrCode::format('svg')
             ->size(500)
             ->errorCorrection('H')
             ->generate($url);
 
-        $filename = $row[8] . '.png';
+        $filename = $row[8] . '.svg';
         file_put_contents(storage_path('app/public/qrcodes/') . $filename, $qrCode);
 
         return $filename;

@@ -2,84 +2,82 @@
 
 namespace App\Http\Controllers\DataMaster\Procurement;
 
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
-use Yajra\DataTables\DataTables;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\DataMaster\ProcurementRequest;
 use App\Models\DataMaster\Procurement;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Http\Request;
+use Yajra\DataTables\Facades\DataTables;
 
 class ProcurementController extends Controller
 {
     public function index()
     {
         if (request()->ajax()) {
-            $data = Procurement::orderBy('updated_at', 'desc')->get();
-            return DataTables::of($data)
-                ->addColumn('action', function ($data) {
-                    return view('pages.data-master.procurement._action.procurementsAction', compact('data'));
-                })->addIndexColumn()->make(true);
+            $query = Procurement::query()->orderBy('updated_at', 'desc');
+
+            return DataTables::eloquent($query)
+                ->addIndexColumn()
+                ->addColumn('action', function (Procurement $procurement) {
+                    return view('pages.data-master.procurement._action.procurementsAction', [
+                        'data' => $procurement,
+                    ])->render();
+                })
+                ->rawColumns(['action'])
+                ->make(true);
         }
-        $data = Procurement::all();
-        return view('pages.data-master.procurement.index', compact('data'));
+
+        return view('pages.data-master.procurement.index');
     }
 
-    public function store(Request $request)
+    public function store(ProcurementRequest $request)
     {
-        $pengadaanId = $request->id;
+        $procurementId = $request->input('id');
 
-        $rules = [
-            'mitra' => 'required',
-            'jenis_pengadaan' => 'required',
-            'tahun_pengadaan' => 'required',
-        ];
-
-        // if (empty($pengadaanId)) {
-        //     $rules['mitra'] .= '|unique:procurements';
-        // } else {
-        //     $rules['mitra'] .= '|unique:procurements,mitra,' . $pengadaanId;
-        // }
-
-        $validator = Validator::make($request->all(), $rules, [
-            'mitra.required' => 'Mitra wajib diisi.',
-            'mitra.unique' => 'Mitra sudah ada.',
-            'jenis_pengadaan.required' => 'Jenis pengadaan wajib diisi.',
-            'tahun_pengadaan.required' => 'Tahun pengadaan wajib diisi.',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json($validator->errors()->all(), 422);
-        }
-
-        // try {
         $procurement = Procurement::updateOrCreate(
-            ['id' => $pengadaanId],
-            [
-                'mitra' => $request->mitra,
-                'jenis_pengadaan' => $request->jenis_pengadaan,
-                'tahun_pengadaan' => $request->tahun_pengadaan,
-            ]
+            ['id' => $procurementId],
+            $request->safe()->only(['mitra', 'jenis_pengadaan', 'tahun_pengadaan'])
         );
 
-        return response()->json(['success' => true, 'message' => 'Data berhasil disimpan', 'data' => $procurement]);
-        // } catch (\Illuminate\Database\QueryException $e) {
-        //     return response()->json(['error' => true, 'message' => 'Data telah ada', 'errors' => $e->getMessage()]);
-        // }
+        return response()->json([
+            'success' => true,
+            'message' => $procurementId ? 'Data berhasil diperbarui' : 'Data berhasil ditambahkan',
+            'data' => $procurement->refresh(),
+        ]);
     }
-
 
     public function edit(Request $request)
     {
-        $id = array('id' => $request->id);
-        $procurement  = Procurement::where($id)->first();
+        $procurement = Procurement::find($request->input('id'));
 
-        return Response()->json($procurement);
+        if (! $procurement) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data tidak ditemukan',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $procurement,
+        ]);
     }
 
     public function destroy(Request $request)
     {
-        $procurement = Procurement::where('id', $request->id);
+        $procurement = Procurement::findOrFail($request->input('id'));
+
+        if ($procurement->fixedAssets()->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pengadaan tidak bisa dihapus karena masih digunakan oleh aset tetap.',
+            ], 422);
+        }
+
         $procurement->delete();
-        return Response()->json(['data' => $procurement, 'message' => 'Data Berhasil di Hapus']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data berhasil dihapus',
+        ]);
     }
 }

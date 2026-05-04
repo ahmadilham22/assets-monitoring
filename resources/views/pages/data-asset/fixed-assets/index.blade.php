@@ -124,30 +124,39 @@
 
 @section('js')
     <script>
-        let kondisi = $('#kondisiFilter').val();
-        let kategori = $('#kategoriFilter').val();
-        let pj = $('#pjFilter').val();
+        // Helper untuk parse error dari FormRequest:
+        // - validation error: {message, errors: {field: [msg, ...]}}
+        // - other error: {message}
+        function parseAjaxError(xhr, fallback) {
+            var message = fallback || 'Terjadi kesalahan.';
+            if (xhr && xhr.responseJSON) {
+                if (xhr.responseJSON.errors) {
+                    message = Object.values(xhr.responseJSON.errors)
+                        .map(function(arr) { return arr[0]; })
+                        .join('\n');
+                } else if (xhr.responseJSON.message) {
+                    message = xhr.responseJSON.message;
+                }
+            }
+            return message;
+        }
 
         $(document).ready(function() {
-
-            var category_id = (new URL(location.href)).searchParams.get('id_category');
-            var user_id = (new URL(location.href)).searchParams.get('id_user');
+            // Ambil pra-filter dari query string supaya halaman bisa di-link langsung
             var params = new URLSearchParams(window.location.search);
-            var condition = params.get('kondisi');
+            var kondisi = params.get('kondisi') || '';
+            var kategori = params.get('id_category') || '';
+            var pj = params.get('id_user') || '';
 
-            if (category_id !== null || category_id !== undefined) {
-                kategori = category_id;
-                $('#id_category_' + kategori).attr('selected', true);
+            if (kategori) {
+                $('#kategoriFilter').val(kategori);
             }
-            if (user_id !== null || user_id !== undefined) {
-                pj = user_id;
-                $('#id_user_' + pj).attr('selected', true);
+            if (pj) {
+                $('#pjFilter').val(pj);
             }
-            if (condition !== null || condition !== undefined) {
-                kondisi = condition;
-                $('#condition_' + kondisi).attr('selected', true);
+            if (kondisi) {
+                $('#kondisiFilter').val(kondisi);
             }
-
 
             $.ajaxSetup({
                 headers: {
@@ -155,25 +164,22 @@
                 }
             });
 
-            // Fungsi untuk mengatur button delete all menjadi disable
-            function buttonDeleteAll() {
-                if ($('input[name="fixedassetcheckbox"]:checked').length > 0) {
-                    $('button#deleteAsset').removeAttr('disabled');
-                } else {
-                    $('button#deleteAsset').attr('disabled', true);
-                }
+            // Toggle tombol "Delete Data" berdasarkan jumlah checkbox terpilih
+            function syncDeleteAllButton() {
+                var anyChecked = $('input[name="fixedassetcheckbox"]:checked').length > 0;
+                $('button#deleteAsset').prop('disabled', !anyChecked);
             }
 
-            // Fungsi untuk mengatur ulang status checkbox header
             function resetHeaderCheckbox() {
                 $('input[name="main_checkbox"]').prop('checked', false);
             }
 
-            // Setting up DataTable
-            let table = $('#myTable').DataTable({
+            // Setting up DataTable (server-side)
+            var table = $('#myTable').DataTable({
                 processing: true,
                 responsive: true,
                 serverSide: true,
+                order: [[4, 'asc']],
                 lengthMenu: [
                     [10, 25, 50, 100, -1],
                     [10, 25, 50, 100, "All"]
@@ -186,28 +192,11 @@
                         d.pj = pj;
                     }
                 },
-                columns: [{
-                        data: 'checkbox',
-                        name: 'checkbox',
-                        orderable: false,
-                        searchable: false,
-                    },
-                    {
-                        data: 'DT_RowIndex',
-                        name: 'DT_RowIndex',
-                    },
-                    {
-                        data: 'inputBMN',
-                        name: 'inputBMN',
-                        orderable: false,
-                        searchable: false,
-                    },
-                    {
-                        data: 'inputSn',
-                        name: 'inputSn',
-                        orderable: false,
-                        searchable: false,
-                    },
+                columns: [
+                    { data: 'checkbox', name: 'checkbox', orderable: false, searchable: false },
+                    { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
+                    { data: 'inputBMN', name: 'inputBMN', orderable: false, searchable: false },
+                    { data: 'inputSn', name: 'inputSn', orderable: false, searchable: false },
                     {
                         data: 'subcategory.category.nama_kategori',
                         name: 'subcategory.category.nama_kategori',
@@ -218,252 +207,220 @@
                     },
                     {
                         data: 'specificlocation.location.lokasi_umum',
-                        name: 'specificlocation.location.lokasi_umum'
+                        name: 'specificlocation.location.lokasi_umum',
                     },
-                    {
-                        data: 'kondisi',
-                        name: 'kondisi'
-                    },
-                    {
-                        data: 'user.nama',
-                        name: 'user.nama'
-                    },
-                    {
-                        data: 'action',
-                        name: 'action',
-                        orderable: false,
-                        searchable: false
-                    },
-
+                    { data: 'kondisi', name: 'kondisi' },
+                    { data: 'user.nama', name: 'user.nama' },
+                    { data: 'action', name: 'action', orderable: false, searchable: false },
                 ],
             });
 
             $.fn.editable.defaults.mode = 'inline';
 
+            // Bind x-editable setelah tiap draw (sekali per draw, bukan dua handler terpisah)
             table.on('draw.dt', function() {
                 $('.editablesn').each(function() {
-                    var pk = $(this).data('pk');
-
                     $(this).editable({
                         url: "{{ route('asset-fixed.update.sn') }}",
-                        type: "text",
-                        name: "kode_sn",
-                        title: "Masukan data",
-                        emptytext: '<input type="text"" placeholder="Masukan Kode" style="width:110px"/>',
+                        type: 'text',
+                        name: 'kode_sn',
+                        title: 'Masukan data',
+                        emptytext: '<input type="text" placeholder="Masukan Kode" style="width:110px"/>',
                         success: function(response) {
                             Swal.fire({
                                 toast: true,
-                                position: "top-end",
+                                position: 'top-end',
                                 timer: 2000,
                                 icon: 'success',
                                 title: 'Success',
                                 text: response.message,
-                                showConfirmButton: false
+                                showConfirmButton: false,
                             });
                         },
-                        error: function(error) {
-                            if (error.responseJSON) {
-                                Swal.fire({
-                                    toast: true,
-                                    position: "top-end",
-                                    timer: 2000,
-                                    icon: 'error',
-                                    title: 'Error',
-                                    text: error.responseJSON[0],
-                                    showConfirmButton: false
-                                });
-                            }
+                        error: function(xhr) {
+                            // x-editable expect string return = error message yang ditampilkan inline
+                            return parseAjaxError(xhr, 'Gagal menyimpan kode SN.');
                         }
                     });
                 });
-            });
 
-            table.on('draw.dt', function() {
                 $('.editablebmn').each(function() {
-                    var pk = $(this).data('pk');
-
                     $(this).editable({
                         url: "{{ route('asset-fixed.update.bmn') }}",
-                        type: "text",
-                        name: "kode_sn",
-                        title: "Masukan data",
-                        emptytext: '<input type="text"" placeholder="Masukan Kode" style="width: 110px"/>',
+                        type: 'text',
+                        name: 'kode_bmn',
+                        title: 'Masukan data',
+                        emptytext: '<input type="text" placeholder="Masukan Kode" style="width:110px"/>',
                         success: function(response) {
                             Swal.fire({
                                 toast: true,
-                                position: "top-end",
+                                position: 'top-end',
                                 timer: 2000,
                                 icon: 'success',
                                 title: 'Success',
                                 text: response.message,
-                                showConfirmButton: false
+                                showConfirmButton: false,
                             });
                         },
-                        error: function(error) {
-                            if (error.responseJSON) {
-                                Swal.fire({
-                                    toast: true,
-                                    position: "top-end",
-                                    timer: 2000,
-                                    icon: 'error',
-                                    title: 'Error',
-                                    text: error.responseJSON[0],
-                                    showConfirmButton: false
-                                });
-                            }
+                        error: function(xhr) {
+                            return parseAjaxError(xhr, 'Gagal menyimpan kode BMN.');
                         }
                     });
                 });
             });
 
-            // Event handler untuk filter
+            // Filter
             $('.filter').on('change', function() {
                 kondisi = $('#kondisiFilter').val();
                 kategori = $('#kategoriFilter').val();
                 pj = $('#pjFilter').val();
                 table.ajax.reload(null, false);
-            })
+            });
 
-            // Event handler untuk mereset filter
+            // Reset filter
             $('#resetFilter').on('click', function() {
                 $('#kondisiFilter').val('');
                 $('#kategoriFilter').val('');
                 $('#pjFilter').val('');
-
                 kondisi = '';
                 kategori = '';
                 pj = '';
-
-                table.search('').draw();
-                table.ajax.reload();
+                table.search('').ajax.reload();
             });
 
-            // Event handler untuk penggambaran ulang tabel
+            // Reset checkbox header tiap kali tabel di-redraw
             table.on('draw', function() {
                 resetHeaderCheckbox();
+                syncDeleteAllButton();
             });
 
-            // Event handler untuk hapus data individual
-            $(document).on('click', '#delete_asset', function(e) {
+            // Hapus individual
+            $(document).off('click', '#delete_asset').on('click', '#delete_asset', function(e) {
                 e.preventDefault();
 
-                let userId = $(this).val();
+                var assetId = $(this).val();
                 Swal.fire({
                     title: 'Apakah Anda yakin?',
-                    text: "Data yang dihapus tidak dapat dikembalikan!",
+                    text: 'Data yang dihapus tidak dapat dikembalikan!',
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonColor: '#d33',
                     cancelButtonColor: '#3085d6',
                     confirmButtonText: 'Ya, Hapus!',
                     cancelButtonText: 'Batal'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        $.ajax({
-                            type: "DELETE",
-                            data: {
-                                id: userId
-                            },
-                            url: "fixed/delete/" + userId,
-                            dataType: 'json',
-                            success: function(res) {
-                                var oTable = $('#myTable').dataTable();
-                                oTable.fnDraw(false);
-                                Swal.fire({
-                                    toast: true,
-                                    position: "top-end",
-                                    timer: 2000,
-                                    icon: 'success',
-                                    title: 'Success',
-                                    text: res.message,
-                                    showConfirmButton: false
-                                })
-                            }
-                        });
+                }).then(function(result) {
+                    if (!result.isConfirmed) {
+                        return;
                     }
+
+                    $.ajax({
+                        type: 'DELETE',
+                        url: "{{ route('asset-fixed.destroy', ['id' => '__ID__']) }}".replace('__ID__', assetId),
+                        dataType: 'json',
+                        success: function(res) {
+                            table.ajax.reload(null, false);
+                            Swal.fire({
+                                toast: true,
+                                position: 'top-end',
+                                timer: 2000,
+                                icon: 'success',
+                                title: 'Success',
+                                text: res.message,
+                                showConfirmButton: false,
+                            });
+                        },
+                        error: function(xhr) {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Error',
+                                text: parseAjaxError(xhr, 'Gagal menghapus data.'),
+                            });
+                        }
+                    });
                 });
             });
 
-            // Event handler untuk seleksi checkbox utama
-            $(document).on('click', 'input[name="main_checkbox"]', function() {
-                if (this.checked) {
-                    $('input[name="fixedassetcheckbox"]').each(function() {
-                        this.checked = true;
-                    });
-                } else {
-                    $('input[name="fixedassetcheckbox"]').each(function() {
-                        this.checked = false;
-
-                    });
-                }
+            // Master checkbox: check/uncheck semua
+            $(document).on('change', 'input[name="main_checkbox"]', function() {
+                var checked = this.checked;
+                $('input[name="fixedassetcheckbox"]').prop('checked', checked);
+                syncDeleteAllButton();
             });
 
-            // Event handler untuk mengatur checkbox utama berdasarkan seleksi checkbox individual
+            // Sinkronisasi master checkbox dengan checkbox individual
             $(document).on('change', 'input[name="fixedassetcheckbox"]', function() {
-                if ($('input[name="fixedassetcheckbox"]').length == $(
-                        'input[name="fixedassetcheckbox"]:checked').length) {
-                    $('input[name="main_checkbox"]').prop('checked', true);
-                } else {
-                    $('input[name="main_checkbox"]').prop('checked', false);
-
-                }
-                buttonDeleteAll();
+                var total = $('input[name="fixedassetcheckbox"]').length;
+                var checked = $('input[name="fixedassetcheckbox"]:checked').length;
+                $('input[name="main_checkbox"]').prop('checked', total > 0 && total === checked);
+                syncDeleteAllButton();
             });
 
-            // Event handler untuk seleksi checkbox utama
-            $('#main_checkbox').on('change', function() {
-                if ($(this).is(':checked')) {
-                    $('#deleteAsset').prop('disabled', false);
-                } else {
-                    $('#deleteAsset').prop('disabled', true);
+            // Hapus terpilih (batch)
+            $(document).off('click', 'button#deleteAsset').on('click', 'button#deleteAsset', function() {
+                var $btn = $(this);
+                if ($btn.prop('disabled')) {
+                    return;
                 }
-            });
 
-            // Event handler untuk aksi menghapus data terpilih
-            $(document).on('click', 'button#deleteAsset', function() {
-                let checkedAsset = [];
+                var checkedAsset = [];
                 $('input[name="fixedassetcheckbox"]:checked').each(function() {
                     checkedAsset.push($(this).data('id'));
-                })
+                });
 
-
-                let url = "{{ route('asset-fixed.destroy.selected') }}"
-                if (checkedAsset.length > 0) {
-                    Swal.fire({
-                        title: 'Apakah Anda yakin?',
-                        text: "Data yang dihapus tidak dapat dikembalikan!",
-                        icon: 'warning',
-                        showCancelButton: true,
-                        confirmButtonColor: '#d33',
-                        cancelButtonColor: '#3085d6',
-                        confirmButtonText: 'Ya, Hapus!',
-                        cancelButtonText: 'Batal'
-                    }).then(function(result) {
-                        if (result.value) {
-                            $.post(url, {
-                                fixedasset_id: checkedAsset
-                            }, function(data) {
-                                if (data.success) {
-                                    var oTable = $('#myTable').dataTable();
-                                    oTable.fnDraw(false);
-                                    $('button#deleteAsset').attr('disabled', true);
-                                    Swal.fire({
-                                        toast: true,
-                                        position: "top-end",
-                                        timer: 2000,
-                                        icon: 'success',
-                                        title: 'Success',
-                                        text: data.message,
-                                        showConfirmButton: false
-                                    })
-                                }
-                            }, 'json');
-                        }
-                    })
+                if (checkedAsset.length === 0) {
+                    return;
                 }
-            });
 
-        })
+                Swal.fire({
+                    title: 'Apakah Anda yakin?',
+                    text: 'Data yang dihapus tidak dapat dikembalikan!',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#d33',
+                    cancelButtonColor: '#3085d6',
+                    confirmButtonText: 'Ya, Hapus!',
+                    cancelButtonText: 'Batal'
+                }).then(function(result) {
+                    if (!result.isConfirmed) {
+                        return;
+                    }
+
+                    $btn.prop('disabled', true);
+
+                    $.ajax({
+                        type: 'POST',
+                        url: "{{ route('asset-fixed.destroy.selected') }}",
+                        data: { fixedasset_id: checkedAsset },
+                        dataType: 'json',
+                        success: function(data) {
+                            if (data.success) {
+                                table.ajax.reload(null, false);
+                                Swal.fire({
+                                    toast: true,
+                                    position: 'top-end',
+                                    timer: 2000,
+                                    icon: 'success',
+                                    title: 'Success',
+                                    text: data.message,
+                                    showConfirmButton: false,
+                                });
+                            }
+                        },
+                        error: function(xhr) {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Error',
+                                text: parseAjaxError(xhr, 'Gagal menghapus data.'),
+                            });
+                        },
+                        complete: function() {
+                            // syncDeleteAllButton() akan handle status enable/disable
+                            // setelah table.ajax.reload selesai (event 'draw')
+                        }
+                    });
+                });
+            });
+        });
     </script>
     <script></script>
     @if (session('success'))

@@ -52,13 +52,9 @@
                 }
             });
             $('#myTable').DataTable({
-                responsive: true,
                 processing: true,
                 responsive: true,
-                lengthMenu: [
-                    [10, 25, 50, 100, -1],
-                    [10, 25, 50, 100, "All"]
-                ],
+                order: [[3, 'desc']],
                 lengthMenu: [
                     [10, 25, 50, 100, -1],
                     [10, 25, 50, 100, "All"]
@@ -67,6 +63,8 @@
                 columns: [{
                         data: 'DT_RowIndex',
                         name: 'DT_RowIndex',
+                        orderable: false,
+                        searchable: false,
                     },
                     {
                         data: 'kode_lokasi',

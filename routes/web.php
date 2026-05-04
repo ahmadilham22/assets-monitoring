@@ -158,7 +158,6 @@ Route::middleware(['auth'])->group(function () {
     // Report
     Route::group(['prefix' => 'report'], function () {
         Route::get('/', [ReportController::class, 'index'])->name('report.index');
-        Route::get('/create', [ReportController::class, 'create'])->name('report.create');
         Route::get('/export', [ReportController::class, 'export'])->name('report.export');
         Route::get('/show/{id}', [ReportController::class, 'show'])->name('report.show');
     });

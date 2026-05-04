@@ -90,6 +90,7 @@
                 serverSide: true,
                 processing: true,
                 responsive: true,
+                order: [[4, 'desc']],
                 lengthMenu: [
                     [10, 25, 50, 100, -1],
                     [10, 25, 50, 100, "All"]
@@ -98,6 +99,8 @@
                 columns: [{
                         data: 'DT_RowIndex',
                         name: 'DT_RowIndex',
+                        orderable: false,
+                        searchable: false,
                     },
                     {
                         data: 'category.nama_kategori',
@@ -123,7 +126,9 @@
                     },
                     {
                         data: 'action',
-                        name: 'action'
+                        name: 'action',
+                        orderable: false,
+                        searchable: false,
                     },
                 ],
             });

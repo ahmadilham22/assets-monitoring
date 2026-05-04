@@ -18,7 +18,7 @@
                      </div>
                  </div>
                  <ul class="p-0 m-0">
-                     @foreach (json_decode($item->category) as $category)
+                     @foreach ($item->category as $category)
                          <li class="d-flex mb-4 pb-1 me-2">
                              <div class="avatar flex-shrink-0 me-3">
                                  <span class="avatar-initial rounded bg-label-info"><i
@@ -37,10 +37,8 @@
                  </ul>
              </div>
              <div class="col-lg-12 d-flex justify-content-end">
-                 {{-- <a class="btn btn-primary mb-4 text-white me-4"
-                     href="{{ route('asset-fixed.index') }}/?id_user={{ $item->user_id }}">Selengkapnya</a> --}}
                  <a class="btn btn-primary mb-4 text-white me-4"
-                     href="{{ route('asset-fixed.index') }}/?kode_lokasi={{ $item->user_id }}">Selengkapnya</a>
+                     href="{{ route('asset-fixed.index') }}?id_user={{ $item->user_id }}">Selengkapnya</a>
              </div>
          </div>
      </div>

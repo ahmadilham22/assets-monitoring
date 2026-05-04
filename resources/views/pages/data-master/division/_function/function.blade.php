@@ -1,110 +1,153 @@
 <script>
+    $(document).ready(function() {
+        // Reset form setiap kali modal ditutup supaya state tidak bocor
+        $('#division-modal').on('hidden.bs.modal', function() {
+            $('#divisionForm')[0].reset();
+            $('#id').val('');
+            $('#btn-save').prop('disabled', false).html('Save changes');
+        });
+
+        // Submit handler: off().on() supaya tidak akumulasi binding,
+        // dan guard double-submit via disable button.
+        $('#divisionForm').off('submit').on('submit', function(e) {
+            e.preventDefault();
+
+            var $btn = $('#btn-save');
+            if ($btn.prop('disabled')) {
+                return;
+            }
+            $btn.prop('disabled', true).html('Menyimpan...');
+
+            var formData = new FormData(this);
+
+            $.ajax({
+                type: 'POST',
+                url: "{{ route('division.store') }}",
+                data: formData,
+                cache: false,
+                contentType: false,
+                processData: false,
+                success: function(response) {
+                    $('#division-modal').modal('hide');
+                    $('#myTable').DataTable().ajax.reload(null, false);
+
+                    if (response.success) {
+                        Swal.fire({
+                            toast: true,
+                            position: 'top-end',
+                            timer: 2000,
+                            icon: 'success',
+                            title: 'Success',
+                            text: response.message,
+                            showConfirmButton: false,
+                        });
+                    }
+                },
+                error: function(xhr) {
+                    var message = 'Terjadi kesalahan.';
+                    if (xhr.responseJSON) {
+                        if (xhr.responseJSON.errors) {
+                            message = Object.values(xhr.responseJSON.errors)
+                                .map(function(arr) { return arr[0]; })
+                                .join('\n');
+                        } else if (xhr.responseJSON.message) {
+                            message = xhr.responseJSON.message;
+                        }
+                    }
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: message,
+                    });
+                },
+                complete: function() {
+                    $btn.prop('disabled', false).html('Save changes');
+                }
+            });
+        });
+    });
+
     function add() {
-        $('#divisionForm').trigger("reset");
-        $('#modalHeader').html("Tambah Divisi");
-        $('#division-modal').modal('show');
+        $('#divisionForm').trigger('reset');
         $('#id').val('');
+        $('#modalHeader').html('Tambah Divisi');
+        $('#division-modal').modal('show');
     }
 
     function editFunc(id) {
         $.ajax({
-            type: "POST",
+            type: 'POST',
             url: "{{ route('division.edit') }}",
             data: {
                 id: id
             },
             dataType: 'json',
             success: function(res) {
-                $('#modalHeader').html("Edit Divisi");
+                if (!res.success) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: res.message || 'Data tidak ditemukan',
+                    });
+                    return;
+                }
+
+                var data = res.data;
+                $('#modalHeader').html('Edit Divisi');
+                $('#id').val(data.id);
+                $('#kode_divisi').val(data.kode_divisi);
+                $('#nama_divisi').val(data.nama_divisi);
                 $('#division-modal').modal('show');
-                $('#id').val(res.id);
-                $('#kode_divisi').val(res.kode_divisi);
-                $('#nama_divisi').val(res.nama_divisi);
             }
         });
     }
 
     function deleteFunc(id) {
-        var id = id;
         Swal.fire({
             title: 'Apakah Anda yakin?',
-            text: "Data yang dihapus tidak dapat dikembalikan!",
+            text: 'Data yang dihapus tidak dapat dikembalikan!',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',
             cancelButtonColor: '#3085d6',
             confirmButtonText: 'Ya, Hapus!',
             cancelButtonText: 'Batal'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                $.ajax({
-                    type: "DELETE",
-                    url: "{{ route('division.destroy') }}",
-                    data: {
-                        id: id
-                    },
-                    dataType: 'json',
-                    success: function(res) {
-                        var table = $('#myTable').DataTable();
-                        table.ajax.reload(null, false);
-                        Swal.fire({
-                            toast: true,
-                            position: "top-end",
-                            timer: 2000,
-                            icon: 'success',
-                            title: 'Success',
-                            text: res.message,
-                            showConfirmButton: false
-                        })
-                    }
-                });
+        }).then(function(result) {
+            if (!result.isConfirmed) {
+                return;
             }
-        });
-    }
 
-    $('#divisionForm').submit(function(e) {
-        e.preventDefault();
-        var formData = new FormData(this);
-        $.ajax({
-            type: 'POST',
-            url: "{{ route('division.store') }}",
-            data: formData,
-            cache: false,
-            contentType: false,
-            processData: false,
-            success: (response) => {
-                $("#division-modal").modal('hide');
-                var table = $('#myTable').DataTable();
-                table.ajax.reload(null, false);
-                $("#btn-save").html('Submit');
-                $("#btn-save").attr("disabled", false);
-                if (response.success) {
+            $.ajax({
+                type: 'DELETE',
+                url: "{{ route('division.destroy') }}",
+                data: {
+                    id: id
+                },
+                dataType: 'json',
+                success: function(res) {
+                    $('#myTable').DataTable().ajax.reload(null, false);
                     Swal.fire({
                         toast: true,
-                        position: "top-end",
+                        position: 'top-end',
                         timer: 2000,
                         icon: 'success',
                         title: 'Success',
-                        text: response.message,
-                        showConfirmButton: false
+                        text: res.message,
+                        showConfirmButton: false,
                     });
-                }
-            },
-            error: function(error) {
-                if (error.responseJSON) {
-                    var oTable = $('#myTable').dataTable();
-                    oTable.fnDraw(false);
+                },
+                error: function(xhr) {
+                    var message = 'Gagal menghapus data.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        message = xhr.responseJSON.message;
+                    }
                     Swal.fire({
-                        toast: true,
-                        position: "top-end",
-                        timer: 2000,
                         icon: 'error',
                         title: 'Error',
-                        text: error.responseJSON[0],
-                        showConfirmButton: false
+                        text: message,
                     });
                 }
-            }
+            });
         });
-    });
+    }
 </script>

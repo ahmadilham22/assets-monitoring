@@ -2,43 +2,39 @@
 
 namespace App\Http\Requests\DataMaster;
 
-use Illuminate\Validation\Rule;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class LocationRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
-     */
     public function rules(): array
     {
-        $locationId = $this->route('location.index') ? $this->route('location.index')->id : null;
+        $locationId = $this->input('id');
 
         return [
-            'lokasi' => [
+            'kode_lokasi' => [
                 'required',
                 'string',
-                Rule::unique('locations')->ignore($locationId),
+                'max:50',
+                Rule::unique('locations', 'kode_lokasi')
+                    ->ignore($locationId)
+                    ->whereNull('deleted_at'),
             ],
+            'lokasi_umum' => ['required', 'string', 'max:255'],
         ];
     }
 
-    public function messages()
+    public function messages(): array
     {
         return [
-            'lokasi.required' => 'Nama kategori harus diisi',
-            'lokasi.unique' => 'Nama kategori sudah ada. Harap pilih nama yang lain.',
+            'kode_lokasi.required' => 'Kode lokasi wajib diisi.',
+            'kode_lokasi.unique' => 'Kode lokasi sudah digunakan.',
+            'lokasi_umum.required' => 'Nama lokasi wajib diisi.',
         ];
     }
 }

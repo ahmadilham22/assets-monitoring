@@ -11,7 +11,7 @@
                 <div class="card">
                     <div class="card-header">
                         <h4>
-                            <a href="{{ route('asset-fixed.index') }}">
+                            <a href="{{ route('report.index') }}">
                                 <i class="fa-solid fa-circle-chevron-left"></i>
                             </a> Data Aset
                         </h4>

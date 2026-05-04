@@ -3,36 +3,41 @@
 namespace App\Http\Requests\DataMaster;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class SpecificLocationRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
-     */
     public function rules(): array
     {
+        $specificLocationId = $this->input('id');
+
         return [
-            'location_id' => 'required',
-            'kode_lokasi' => 'required|string',
-            'lokasi_khusus' => 'required|string',
+            'location_id' => ['required', 'integer', 'exists:locations,id'],
+            'kode_lokasi' => [
+                'required',
+                'string',
+                'max:50',
+                Rule::unique('specific_locations', 'kode_lokasi')
+                    ->ignore($specificLocationId)
+                    ->whereNull('deleted_at'),
+            ],
+            'lokasi_khusus' => ['required', 'string', 'max:255'],
         ];
     }
 
-    public function messages()
+    public function messages(): array
     {
         return [
-            'kode_lokasi.required' => 'Kode kategori harus diisi',
-            'lokasi_khusus.required' => 'Nama kategori harus diisi',
+            'location_id.required' => 'Lokasi umum wajib dipilih.',
+            'location_id.exists' => 'Lokasi umum tidak ditemukan.',
+            'kode_lokasi.required' => 'Kode sub lokasi wajib diisi.',
+            'kode_lokasi.unique' => 'Kode sub lokasi sudah digunakan.',
+            'lokasi_khusus.required' => 'Nama sub lokasi wajib diisi.',
         ];
     }
 }

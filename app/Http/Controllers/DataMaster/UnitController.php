@@ -2,78 +2,82 @@
 
 namespace App\Http\Controllers\DataMaster;
 
-use Illuminate\Http\Request;
-use App\Models\DataMaster\Unit;
-use Yajra\DataTables\DataTables;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Validator;
+use App\Http\Requests\DataMaster\UnitRequest;
+use App\Models\DataMaster\Unit;
+use Illuminate\Http\Request;
+use Yajra\DataTables\Facades\DataTables;
 
 class UnitController extends Controller
 {
     public function index()
     {
         if (request()->ajax()) {
-            $data = Unit::all();
-            // $data = Unit::orderBy('updated_at', 'desc')->get();
-            return DataTables::of($data)
-                ->addColumn('action', function ($data) {
-                    return view('pages.data-master.unit._action.unitAction', compact('data'));
-                })->addIndexColumn()->make(true);
+            $query = Unit::query()->orderBy('updated_at', 'desc');
+
+            return DataTables::eloquent($query)
+                ->addIndexColumn()
+                ->addColumn('action', function (Unit $unit) {
+                    return view('pages.data-master.unit._action.unitAction', [
+                        'data' => $unit,
+                    ])->render();
+                })
+                ->rawColumns(['action'])
+                ->make(true);
         }
-        // $data = Unit::orderBy('updated_at', 'desc')->get();
-        // dd($data);
+
         return view('pages.data-master.unit.index');
     }
 
-    public function store(Request $request)
+    public function store(UnitRequest $request)
     {
-        $unitId = $request->id;
+        $unitId = $request->input('id');
 
-        $rules = [
-            'nama' => 'required',
-        ];
+        $unit = Unit::updateOrCreate(
+            ['id' => $unitId],
+            $request->safe()->only(['nama'])
+        );
 
-        // Jika ini adalah data baru, tambahkan aturan unique untuk 'nama'
-        if (empty($unitId)) {
-            $rules['nama'] .= '|unique:units'; // Sesuaikan dengan nama tabel yang benar
-        } else {
-            // Validasi tambahan untuk perubahan data yang sudah ada
-            $rules['nama'] .= '|unique:units,nama,' . $unitId; // Jangan periksa data itu sendiri
-        }
-
-        $validator = Validator::make($request->all(), $rules, [
-            'nama.required' => 'Nama wajib diisi.',
-            'nama.unique' => 'Nama sudah ada.',
+        return response()->json([
+            'success' => true,
+            'message' => $unitId ? 'Data berhasil diperbarui' : 'Data berhasil ditambahkan',
+            'data' => $unit->refresh(),
         ]);
-
-        if ($validator->fails()) {
-            return response()->json(['error' => true, 'message' => $validator->errors()->first()]);
-        }
-
-        try {
-            $unit = Unit::updateOrCreate(
-                ['id' => $unitId],
-                ['nama' => $request->nama]
-            );
-
-            return response()->json(['success' => true, 'message' => 'Data berhasil disimpan', 'data' => $unit]);
-        } catch (\Illuminate\Database\QueryException $e) {
-            return response()->json(['error' => true, 'message' => 'Data telah ada', 'errors' => $e->getMessage()]);
-        }
     }
-
 
     public function edit(Request $request)
     {
-        $id = array('id' => $request->id);
-        $unit  = Unit::where($id)->first();
-        return response()->json($unit);
+        $unit = Unit::find($request->input('id'));
+
+        if (! $unit) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data tidak ditemukan',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $unit,
+        ]);
     }
 
     public function destroy(Request $request)
     {
-        $unit = Unit::where('id', $request->id);
+        $unit = Unit::findOrFail($request->input('id'));
+
+        if ($unit->fixedAssets()->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unit tidak bisa dihapus karena masih digunakan oleh aset tetap.',
+            ], 422);
+        }
+
         $unit->delete();
-        return Response()->json(['data' => $unit, 'message' => 'Data Berhasil di Hapus']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data berhasil dihapus',
+        ]);
     }
 }

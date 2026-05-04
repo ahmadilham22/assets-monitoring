@@ -2,83 +2,82 @@
 
 namespace App\Http\Controllers\DataMaster\Division;
 
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
-use Yajra\DataTables\DataTables;
-use App\Models\DataMaster\Division;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Validator;
+use App\Http\Requests\DataMaster\DivisionRequest;
+use App\Models\DataMaster\Division;
+use Illuminate\Http\Request;
+use Yajra\DataTables\Facades\DataTables;
 
 class DivisionController extends Controller
 {
     public function index()
     {
         if (request()->ajax()) {
-            $data = Division::orderBy('updated_at', 'desc')->get();
-            return DataTables::of($data)
-                ->addColumn('action', function ($data) {
-                    return view('pages.data-master.division._action.divisionAction', compact('data'));
-                })->addIndexColumn()->make(true);
+            $query = Division::query()->orderBy('updated_at', 'desc');
+
+            return DataTables::eloquent($query)
+                ->addIndexColumn()
+                ->addColumn('action', function (Division $division) {
+                    return view('pages.data-master.division._action.divisionAction', [
+                        'data' => $division,
+                    ])->render();
+                })
+                ->rawColumns(['action'])
+                ->make(true);
         }
-        $data = Division::all();
-        return view('pages.data-master.division.index', compact('data'));
+
+        return view('pages.data-master.division.index');
     }
 
-    public function store(Request $request)
+    public function store(DivisionRequest $request)
     {
-        $divisiId = $request->id;
+        $divisionId = $request->input('id');
 
-        $rules = [
-            'kode_divisi' => 'required',
-            'nama_divisi' => 'required',
-        ];
-
-        // Jika ini adalah data baru, tambahkan aturan unique untuk 'kode_divisi'
-        if (empty($divisiId)) {
-            $rules['kode_divisi'] .= '|unique:divisions'; // Sesuaikan dengan nama tabel yang benar
-        } else {
-            // Jika ini adalah pengubahan data, tambahkan aturan unique, kecuali untuk data yang sedang diedit
-            $rules['kode_divisi'] .= '|unique:divisions,kode_divisi,' . $divisiId;
-        }
-
-        $validator = Validator::make($request->all(), $rules, [
-            'kode_divisi.required' => 'Kode divisi wajib diisi.',
-            'kode_divisi.unique' => 'Kode divisi sudah ada.',
-            'nama_divisi.required' => 'Nama divisi wajib diisi.',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json($validator->errors()->all(), 422);
-        }
-
-        // try {
         $division = Division::updateOrCreate(
-            ['id' => $divisiId],
-            [
-                'kode_divisi' => $request->kode_divisi,
-                'nama_divisi' => $request->nama_divisi,
-            ]
+            ['id' => $divisionId],
+            $request->safe()->only(['kode_divisi', 'nama_divisi'])
         );
 
-        return response()->json(['success' => true, 'message' => 'Data berhasil disimpan', 'data' => $division]);
-        // } catch (\Illuminate\Database\QueryException $e) {
-        //     return response()->json(['error' => true, 'message' => 'Data telah ada', 'errors' => $e->getMessage()]);
-        // }
+        return response()->json([
+            'success' => true,
+            'message' => $divisionId ? 'Data berhasil diperbarui' : 'Data berhasil ditambahkan',
+            'data' => $division->refresh(),
+        ]);
     }
-
 
     public function edit(Request $request)
     {
-        $id = array('id' => $request->id);
-        $division  = Division::where($id)->first();
+        $division = Division::find($request->input('id'));
 
-        return Response()->json($division);
+        if (! $division) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data tidak ditemukan',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $division,
+        ]);
     }
 
     public function destroy(Request $request)
     {
-        $division = Division::where('id', $request->id);
+        $division = Division::findOrFail($request->input('id'));
+
+        if ($division->users()->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Divisi tidak bisa dihapus karena masih memiliki user.',
+            ], 422);
+        }
+
         $division->delete();
-        return Response()->json(['data' => $division, 'message' => 'Data Berhasil di Hapus']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data berhasil dihapus',
+        ]);
     }
 }

@@ -6,30 +6,8 @@
             z-index: 1000;
         }
 
-        .chartMenu {
-            width: 100vw;
-            height: 40px;
-            background: #1A1A1A;
-            color: rgba(54, 162, 235, 1);
-        }
-
-        .chartMenu p {
-            padding: 10px;
-            font-size: 20px;
-        }
-
-        .chartCard {
-            width: 100vw;
-            height: calc(100vh - 40px);
-            background: rgba(54, 162, 235, 0.2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
         .chartBox {
             width: 580px;
-            /* padding: 20px; */
             border-radius: 20px;
         }
     </style>
@@ -46,12 +24,6 @@
                                 <h4 class="card-title text-primary mb-5">
                                     Selamat Datang, {{ Auth::user()->nama }}! 🎉
                                 </h4>
-                                <p class="mb-4">
-                                    {{-- You have done <span class="fw-bold">72%</span> more
-                                    sales today. Check your new badge in your profile. --}}
-                                </p>
-                                {{-- <a href="javascript:;" class="btn btn-sm btn-outline-primary">View
-                                    Badges</a> --}}
                             </div>
                         </div>
                         <div class="col-sm-5 text-center text-sm-left">
@@ -66,53 +38,33 @@
             </div>
         </div>
 
-
         <div class="row">
-            {{-- Data Aset --}}
+            {{-- Chart Kondisi Aset per Kategori --}}
             <div class="col-md-12 mb-4">
                 <div class="card">
                     <div class="card-header">
-                        <h4>Data Aset Tetap</h4>
+                        <h4>Kondisi Aset per Kategori</h4>
                     </div>
                     <div class="card-body">
-                        <div class="row d-flex justify-content-between">
-                            <div class="col-lg-5 col-sm-12">
-                                <span class="text-center">
-                                    <h4>Kondisi Baik</h4>
-                                </span>
-                                @if (array_sum($dataset['datasetBaik']) == 0)
-                                    <p class="text-center mt-5">No data found
-                                    </p>
-                                @else
-                                    <canvas id="myChart"></canvas>
-                                @endif
+                        @if (empty($dataset['labels']))
+                            <p class="text-center my-5">No data found</p>
+                        @else
+                            {{-- Tinggi canvas dihitung berdasarkan jumlah kategori
+                                 (28px/baris + padding) supaya bar tetap jelas dibaca
+                                 walau kategori banyak. Wrapper di-set scrollable
+                                 sebagai safety net. --}}
+                            <div style="max-height: 520px; overflow-y: auto;">
+                                <div style="height: {{ max(220, count($dataset['labels']) * 28 + 60) }}px;">
+                                    <canvas id="kondisiChart"></canvas>
+                                </div>
                             </div>
-                            <div class="col-lg-5 col-sm-12">
-                                <span class="text-center">
-                                    <h4>Kondisi Rusak</h4>
-                                </span>
-                                @if (array_sum($dataset['datasetRusak']) == 0)
-                                    <p class="text-center mt-5">No data found
-                                    </p>
-                                @else
-                                    <canvas id="myChart1"></canvas>
-                                @endif
-                            </div>
-                        </div>
-                        {{-- <div class="row data-kategori" id="data-wrapper">
-                            @include('pages.dashboard.data')
-                        </div>
-                        <div class="text-center">
-                            <button class="btn btn-success load-more-data">View More</button>
-                            <button class="btn btn-danger load-less-data" style="display:none;">View Less</button>
-                        </div> --}}
+                        @endif
                     </div>
                 </div>
             </div>
-            {{-- Data Aset --}}
+            {{-- /Chart --}}
 
-
-            {{-- User --}}
+            {{-- Kartu Penanggung Jawab --}}
             <div class="col-md-12 mb-4">
                 <div class="card">
                     <div class="card-header">
@@ -123,224 +75,130 @@
                             @include('pages.dashboard.data-users')
                         </div>
                         <div class="text-center">
-                            <button class="btn btn-primary load-more-data-users">View More</button>
-                            <button class="btn btn-danger load-less-data-users" style="display:none;">View Less</button>
+                            <button class="btn btn-primary load-more-data-users"
+                                @if ($nextPageUsers === null) style="display:none;" @endif>
+                                View More
+                            </button>
+                            <button class="btn btn-danger load-less-data-users" style="display:none;">
+                                View Less
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
-            {{-- User --}}
+            {{-- /Kartu Penanggung Jawab --}}
         </div>
-        {{-- <a href="https://themeselection.com/">ThemeSelection</a> --}}
     </div>
 @endsection
 
 @section('js')
+    {{-- Chart.js (UMD bundle — sudah include semua adapter dasar) --}}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js/dist/chart.umd.min.js"></script>
+
     <script>
-        $(document).ready(function() {
-            // Categories
-            var pageCategories = 1;
+        // --- Horizontal Stacked Bar Chart ---
+        (function () {
+            var dataChart = {!! json_encode($dataset) !!};
+            var canvas = document.getElementById('kondisiChart');
+            if (!canvas || !dataChart.labels.length) return;
 
-            // Saat halaman dimuat, simpan data asli sebelum "View More" ditekan
-            var originalDataCategories = $("#data-wrapper").html();
-
-            $('.load-more-data').on('click', function() {
-                pageCategories++; // Increment nomor halaman saat tombol ditekan
-
-                // Lakukan AJAX request untuk memuat data berikutnya
-                $.ajax({
-                    url: "{{ route('home') }}", // Ganti dengan route yang sesuai di Laravel Anda
-                    method: "GET",
-                    data: {
-                        page: pageCategories
-                    },
-                    success: function(response) {
-                        // Memasukkan data baru ke dalam container data yang sudah ada
-                        $("#data-wrapper").append(response.htmlCategories);
-
-                        // Jika tidak ada data lagi atau jumlah total data sudah melebihi perPageCategories, ubah tombol menjadi "View Less"
-                        if (response.nextPageCategories == null) {
-                            $('.load-more-data').hide(); // Sembunyikan tombol "View More"
-                            $('.load-less-data').show(); // Tampilkan tombol "View Less"
+            new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: dataChart.labels,
+                    datasets: [
+                        {
+                            label: 'Baik',
+                            data: dataChart.baik,
+                            backgroundColor: '#28c76f',
+                            borderWidth: 0,
+                        },
+                        {
+                            label: 'Rusak',
+                            data: dataChart.rusak,
+                            backgroundColor: '#ea5455',
+                            borderWidth: 0,
                         }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',           // bar horizontal
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { intersect: false, mode: 'index' },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: { precision: 0 },
+                        },
+                        y: { stacked: true }
                     },
-                    error: function(jqXHR, textStatus, errorThrown) {
-                        console.error('Error:', errorThrown);
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                footer: function (items) {
+                                    var total = items.reduce(function (sum, it) {
+                                        return sum + it.parsed.x;
+                                    }, 0);
+                                    return 'Total: ' + total;
+                                }
+                            }
+                        }
                     }
-                });
+                }
             });
+        })();
 
-            // Event handler untuk tombol "View Less"
-            $('.load-less-data').on('click', function() {
-                // Kembali ke halaman awal (misalnya, halaman pertama)
-                pageCategories = 1;
-
-                // Sembunyikan tombol "View Less"
-                $('.load-less-data').hide();
-                // Tampilkan tombol "View More"
-                $('.load-more-data').show();
-
-                // Menampilkan kembali data asli yang disimpan sebelumnya
-                $("#data-wrapper").empty(); // Menghapus semua data yang sudah dimuat
-                $("#data-wrapper").append(originalDataCategories);
-            });
-            // Categories
-
-
-
-            // Users
+        // --- Pagination kartu User ---
+        $(document).ready(function () {
             var pageUsers = 1;
+            var originalDataUsers = $('#data-wrapper-users').html();
 
-            // Saat halaman dimuat, simpan data asli sebelum "View More" ditekan
-            var originalDataUsers = $("#data-wrapper-users").html();
+            $.ajaxSetup({
+                headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') }
+            });
 
-            $('.load-more-data-users').on('click', function() {
-                pageUsers++; // Increment nomor halaman saat tombol ditekan
+            $('.load-more-data-users').on('click', function () {
+                pageUsers++;
 
-                // Lakukan AJAX request untuk memuat data berikutnya
                 $.ajax({
-                    url: "{{ route('home.users') }}", // Ganti dengan route yang sesuai di Laravel Anda
-                    method: "GET",
-                    data: {
-                        page: pageUsers
-                    },
-                    success: function(response) {
+                    url: '{{ route('home.users') }}',
+                    method: 'GET',
+                    data: { page: pageUsers },
+                    success: function (response) {
+                        $('#data-wrapper-users').append(response.htmlUsers);
 
-                        // Memasukkan data baru ke dalam container data yang sudah ada
-                        $("#data-wrapper-users").append(
-                            response
-                            .htmlUsers);
-
-                        // Jika tidak ada data lagi atau jumlah total data sudah kembali ke jumlah awal, ubah tombol menjadi "View Less"
-                        if (response.nextPageUsers == null) {
-                            $('.load-more-data-users').hide(); // Sembunyikan tombol "View More"
-                            $('.load-less-data-users').show(); // Tampilkan tombol "View Less"
+                        if (response.nextPageUsers === null) {
+                            $('.load-more-data-users').hide();
+                            $('.load-less-data-users').show();
                         }
                     },
-                    error: function(jqXHR, textStatus, errorThrown) {
-                        console.error('Error:', errorThrown);
+                    error: function (xhr) {
+                        console.error('Gagal memuat data user:', xhr.statusText);
                     }
                 });
             });
-            // Event handler untuk tombol "View Less"
-            $('.load-less-data-users').on('click', function() {
-                // Kembali ke halaman awal (misalnya, halaman pertama)
+
+            $('.load-less-data-users').on('click', function () {
                 pageUsers = 1;
-
-                // Sembunyikan tombol "View Less"
                 $('.load-less-data-users').hide();
-                // Tampilkan tombol "View More"
                 $('.load-more-data-users').show();
-
-                // Menampilkan kembali data asli yang disimpan sebelumnya
-                $("#data-wrapper-users").empty(); // Menghapus semua data yang sudah dimuat
-                $("#data-wrapper-users").append(originalDataUsers);
+                $('#data-wrapper-users').html(originalDataUsers);
             });
-            // Users
         });
     </script>
-    <script src="http://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script type="text/javascript" src="http://cdn.jsdelivr.net/npm/chart.js/dist/chart.umd.min.js"></script>
-    <script src="http://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"
-        integrity="sha512-JPcRR8yFa8mmCsfrw4TNte1ZvF1e3+1SdGMslZvmrzDYxS69J7J49vkFL8u6u8PlPJK+H3voElBtUCzaXj+6ig=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <script src="http://unpkg.com/chart.js-plugin-labels-dv/dist/chartjs-plugin-labels.min.js"></script>
-    <script>
-        const dataChart = {!! json_encode($dataset) !!};
-        const data = {
-            labels: dataChart.labels,
-            datasets: [{
-                data: dataChart.datasetBaik,
-                borderWidth: 1
-            }]
-        };
-        const data1 = {
-            labels: dataChart.labels,
-            datasets: [{
-                data: dataChart.datasetRusak,
-                borderWidth: 1
-            }]
-        };
-        const goodCategory = {
-            type: 'pie',
-            data: data,
-            options: {
-                responsive: true,
-                plugins: {
-                    labels: {
-                        render: (args) => {
-                            return `${args.value} ${args.label}`;
-                        }
-                    },
-                    legend: {
-                        position: 'bottom',
-                    },
-                    title: {
-                        display: true,
-                        // text: 'Kondisi Baik',
-                        padding: {
-                            bottom: 30
-                        },
-                        font: {
-                            size: 16,
-                        }
-                    }
-                },
-            },
-        };
 
-        const badCategory = {
-            type: 'pie',
-            data: data1,
-            options: {
-                responsive: true,
-                plugins: {
-                    labels: {
-                        render: (args) => {
-                            return `${args.value} ${args.label}`;
-                        }
-                    },
-                    legend: {
-                        position: 'bottom',
-                    },
-                    title: {
-                        display: true,
-                        // text: 'Kondisi Rusak',
-                        padding: {
-                            bottom: 30
-                        },
-                        font: {
-                            size: 16,
-                        }
-                    }
-                },
-            },
-        };
-
-
-        // render init block
-        const myChart = new Chart(
-            document.getElementById('myChart'),
-            goodCategory
-        );
-        const myChart1 = new Chart(
-            document.getElementById('myChart1'),
-            badCategory
-        );
-
-        // Instantly assign Chart.js version
-        const chartVersion = document.getElementById('chartVersion');
-        chartVersion.innerText = Chart.version;
-    </script>
-    <script>
-        @if (session('success'))
+    @if (session('success'))
+        <script>
             Swal.fire({
                 icon: 'success',
                 title: 'Selamat Datang',
                 text: '{{ session('success') }}',
                 showConfirmButton: true,
                 timer: 3000,
-            })
-        @endif
-    </script>
+            });
+        </script>
+    @endif
 @endsection

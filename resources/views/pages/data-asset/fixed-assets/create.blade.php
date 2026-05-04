@@ -265,57 +265,81 @@
 @section('js')
     <script src="http://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
-        $('#resetData').on('click', function(e) {
-            $('#FixedAssetForm :input').val('');
-            $('#FixedAssetForm select').val('').trigger('change');
-        })
-        $('#FixedAssetForm').submit(function(e) {
-            e.preventDefault();
-            var formData = new FormData(this);
-            formData.append('_token', '{{ csrf_token() }}');
-            $.ajax({
-                type: 'POST',
-                beforeSend: function() {
-                    $('.auto-load').show();
-                },
-                url: "{{ route('asset-fixed.store.ajax') }}",
-                data: formData,
-                cache: false,
-                contentType: false,
-                processData: false,
-                success: (response) => {
-                    $('.auto-load').hide();
-                    $("#btn-save").html('Submit');
-                    $("#btn-save").attr("disabled", false);
-                    Swal.fire({
-                        toast: true,
-                        position: "top-end",
-                        timer: 2000,
-                        icon: 'success',
-                        title: 'Success',
-                        text: response.message,
-                        showConfirmButton: false
-                    });
+        // Helper untuk parse error dari FormRequest:
+        // - validation error: {message, errors: {field: [msg, ...]}}
+        // - other error: {message}
+        function parseAjaxError(xhr, fallback) {
+            var message = fallback || 'Terjadi kesalahan.';
+            if (xhr && xhr.responseJSON) {
+                if (xhr.responseJSON.errors) {
+                    message = Object.values(xhr.responseJSON.errors)
+                        .map(function(arr) { return arr[0]; })
+                        .join('\n');
+                } else if (xhr.responseJSON.message) {
+                    message = xhr.responseJSON.message;
+                }
+            }
+            return message;
+        }
 
-                    $('#kode_bmn').val('');
-                    $('#kode_sn').val('');
-                    $('#keterangan').val('');
-                },
-                error: function(error) {
-                    if (error.responseJSON) {
+        $(document).ready(function() {
+            // Reset form: kosongkan semua input + reset select2
+            $('#resetData').on('click', function(e) {
+                e.preventDefault();
+                $('#FixedAssetForm')[0].reset();
+                $('#FixedAssetForm select').val('').trigger('change');
+            });
+
+            // Submit handler: off().on() supaya tidak akumulasi binding,
+            // dan guard double-submit via disable button.
+            $('#FixedAssetForm').off('submit').on('submit', function(e) {
+                e.preventDefault();
+
+                var $form = $(this);
+                var $btn = $form.find('button[type="submit"]');
+                if ($btn.prop('disabled')) {
+                    return;
+                }
+                $btn.prop('disabled', true).html('Menyimpan...');
+                $('.auto-load').show();
+
+                var formData = new FormData(this);
+                formData.append('_token', '{{ csrf_token() }}');
+
+                $.ajax({
+                    type: 'POST',
+                    url: "{{ route('asset-fixed.store.ajax') }}",
+                    data: formData,
+                    cache: false,
+                    contentType: false,
+                    processData: false,
+                    success: function(response) {
+                        if (response.success) {
+                            // Tetap di halaman create dan biarkan data form tetap ada.
+                            // User bisa pakai tombol "Reset Data" kalau mau kosongkan.
+                            Swal.fire({
+                                toast: true,
+                                position: 'top-end',
+                                timer: 2000,
+                                icon: 'success',
+                                title: 'Success',
+                                text: response.message,
+                                showConfirmButton: false,
+                            });
+                        }
+                    },
+                    error: function(xhr) {
                         Swal.fire({
-                            toast: true,
-                            position: "top-end",
-                            timer: 2000,
                             icon: 'error',
                             title: 'Error',
-                            text: error.responseJSON[0],
-                            showConfirmButton: false
+                            text: parseAjaxError(xhr, 'Gagal menyimpan data.'),
                         });
-
+                    },
+                    complete: function() {
                         $('.auto-load').hide();
+                        $btn.prop('disabled', false).html('Save');
                     }
-                }
+                });
             });
         });
     </script>

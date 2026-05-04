@@ -3,40 +3,52 @@
 namespace App\Http\Controllers\Report;
 
 use Illuminate\Http\Request;
-use App\Models\DataMaster\User;
-use Yajra\DataTables\DataTables;
 use Illuminate\Support\Facades\DB;
-use App\Models\DataMaster\Category;
 use App\Exports\Report\ReportExport;
 use App\Http\Controllers\Controller;
 use App\Models\DataAsset\FixedAsset;
 use Maatwebsite\Excel\Facades\Excel;
-use App\Models\DataMaster\SubCategory;
+use Yajra\DataTables\Facades\DataTables;
 
 class ReportController extends Controller
 {
     public function index(Request $request)
     {
-        if (request()->ajax()) {
-            $data = FixedAsset::with(['subcategory.category', 'specificlocation.location', 'user', 'procurement'])->orderBy('updated_at', 'desc')->get();
+        if ($request->ajax()) {
+            // Server-side DataTables via Eloquent.
+            // Select eksplisit supaya Postgres tidak "ambiguous column" ketika
+            // DataTables JOIN tabel relasi untuk sorting/search.
+            $query = FixedAsset::with([
+                'subcategory.category',
+                'specificlocation.location',
+                'user',
+                'procurement',
+            ])
+                ->select('fixed_assets.*')
+                ->orderBy('fixed_assets.updated_at', 'desc');
 
-            if ($request->input('kondisi') !== null) {
-                $data = $data->where('kondisi', $request->kondisi);
+            // Filter di level query, bukan Collection::where() (yang kemarin bug
+            // karena pakai dotted path).
+            if ($request->filled('kondisi')) {
+                $query->where('fixed_assets.kondisi', $request->input('kondisi'));
             }
 
-            if ($request->input('kategori') !== null) {
-                $data = $data->where('subcategory.categories_id', $request->kategori);
+            if ($request->filled('kategori')) {
+                $kategori = $request->input('kategori');
+                $query->whereHas('subcategory', function ($q) use ($kategori) {
+                    $q->where('categories_id', $kategori);
+                });
             }
 
-            if ($request->input('pj') !== null) {
-                $data = $data->where('user.id', $request->pj);
+            if ($request->filled('pj')) {
+                $query->where('fixed_assets.user_id', $request->input('pj'));
             }
 
-            if ($request->input('periode') !== null) {
-                $data = $data->where('tahun_perolehan', $request->periode);
+            if ($request->filled('periode')) {
+                $query->where('fixed_assets.tahun_perolehan', $request->input('periode'));
             }
 
-            return DataTables::of($data)
+            return DataTables::eloquent($query)
                 ->addColumn('action', function ($data) {
                     return view('pages.report._action.reportAction', compact('data'));
                 })
@@ -44,26 +56,38 @@ class ReportController extends Controller
                     return view('pages.report._action.chechbox', compact('data'));
                 })
                 ->rawColumns(['action', 'checkbox'])
-                ->addIndexColumn()->make(true);
+                ->addIndexColumn()
+                ->make(true);
         }
 
-        $data = FixedAsset::query()->with(['subcategory.category', 'specificlocation.location', 'user', 'procurement'])->get();
-        // return $data;
-
-
-        $kondisi = FixedAsset::selectRaw('kondisi')
+        // Data untuk dropdown filter
+        $kondisi = FixedAsset::query()
+            ->whereNotNull('kondisi')
             ->distinct()
             ->pluck('kondisi')
             ->toArray();
 
         $subcategories = DB::table('sub_categories AS sc')
             ->join('categories AS c', 'sc.categories_id', '=', 'c.id')
-            ->select('sc.categories_id as id', DB::raw('MAX(sc.nama_sub_kategori) as nama_sub_kategori'), DB::raw('MAX(c.nama_kategori) as nama_kategori'))
+            ->select(
+                'sc.categories_id as id',
+                DB::raw('MAX(sc.nama_sub_kategori) as nama_sub_kategori'),
+                DB::raw('MAX(c.nama_kategori) as nama_kategori')
+            )
             ->groupBy('sc.categories_id')
             ->get();
 
-        $users = DB::table('users')->select('id', 'nama')->where('role', 'admin')->whereNotNull('division_id')->get();
-        $periode = FixedAsset::selectRaw('tahun_perolehan')->distinct()->pluck('tahun_perolehan')->toArray();
+        $users = DB::table('users')
+            ->select('id', 'nama')
+            ->where('role', 'admin')
+            ->whereNotNull('division_id')
+            ->get();
+
+        $periode = FixedAsset::query()
+            ->whereNotNull('tahun_perolehan')
+            ->distinct()
+            ->pluck('tahun_perolehan')
+            ->toArray();
 
         $conditions = array_combine($kondisi, $kondisi);
         $periods = array_combine($periode, $periode);
@@ -73,15 +97,24 @@ class ReportController extends Controller
 
     public function listPublic(Request $request)
     {
-        if (request()->ajax()) {
-            $data = FixedAsset::with(['subcategory.category', 'specificlocation.location', 'user', 'procurement'])->orderBy('updated_at', 'desc')->get();
+        if ($request->ajax()) {
+            $query = FixedAsset::with([
+                'subcategory.category',
+                'specificlocation.location',
+                'user',
+                'procurement',
+            ])
+                ->select('fixed_assets.*')
+                ->orderBy('fixed_assets.updated_at', 'desc');
 
-            if ($request->query('kode_lokasi')) {
-
-                $data = $data->where('specificlocation.kode_lokasi', $request->query('kode_lokasi'));
+            if ($request->filled('kode_lokasi')) {
+                $kodeLokasi = $request->query('kode_lokasi');
+                $query->whereHas('specificlocation', function ($q) use ($kodeLokasi) {
+                    $q->where('kode_lokasi', $kodeLokasi);
+                });
             }
 
-            return DataTables::of($data)
+            return DataTables::eloquent($query)
                 ->addIndexColumn()
                 ->make(true);
         }
@@ -89,55 +122,52 @@ class ReportController extends Controller
         return view('pages.report.list-public');
     }
 
-    public function create()
-    {
-        return view('pages.report.create');
-    }
-    public function edit()
-    {
-    }
-
     public function show($id)
     {
-        $data = FixedAsset::with(['subcategory.category', 'specificlocation.location', 'user', 'procurement', 'unit', 'histories'])->findOrFail($id);
+        $data = FixedAsset::with([
+            'subcategory.category',
+            'specificlocation.location',
+            'user',
+            'procurement',
+            'unit',
+            'histories',
+        ])->findOrFail($id);
 
         $latestHistory = $data->histories->sortByDesc('created_at')->first();
-        // dd($latestHistory);
-        // $folderPath = storage_path('app/public/qrcodes/');
-        // $qrCodePath = $folderPath . $data->kode_sn . '.png';
+
         return view('pages.report.show', compact('data', 'latestHistory'));
     }
 
     public function showPublic($id)
     {
-        $data = FixedAsset::with(['subcategory.category', 'specificlocation.location', 'user', 'procurement', 'unit', 'histories'])->findOrFail($id);
+        $data = FixedAsset::with([
+            'subcategory.category',
+            'specificlocation.location',
+            'user',
+            'procurement',
+            'unit',
+            'histories',
+        ])->findOrFail($id);
 
         $latestHistory = $data->histories->sortByDesc('created_at')->first();
-        $fixedAsset = FixedAsset::find($id);
-        // dd($fixedAsset);
-        // dd($data->specificlocation->qrcode);
+
         return view('pages.report.show-public', compact('data', 'latestHistory'));
     }
 
     public function export(Request $request)
     {
-        // Mengambil data dari query params
+        // Ambil filter dari query params yang disusun JS ketika user pilih filter
+        // atau centang checkbox di tabel.
         $kategori = $request->query('kategori');
         $kondisi = $request->query('kondisi');
         $pj = $request->query('pj');
         $periode = $request->query('periode');
         $id = $request->query('sn');
 
-        // Cek sn jika ada maka jadikan array jika tidak jadikan array kosong
-        if ($id) {
-            $idArray = explode(',', $id);
-        } else {
-            $idArray = [];
-        }
+        $idArray = $id ? explode(',', $id) : [];
 
-        // memasukan variabel kedalam suatu array
         $params = [$kategori, $kondisi, $pj, $idArray, $periode];
-        // dd($params);
+
         return Excel::download(new ReportExport($params), 'data.xlsx');
     }
 }

@@ -22,7 +22,7 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="submit" class="btn btn-primary">
+                    <button type="submit" id="btn-save" class="btn btn-primary">
                         Save changes
                     </button>
                 </div>

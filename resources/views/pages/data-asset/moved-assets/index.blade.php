@@ -43,10 +43,13 @@
                 processing: true,
                 responsive: true,
                 serverSide: true,
+                order: [[1, 'asc']],
                 ajax: "{{ route('asset-moved.index') }}",
                 columns: [{
                         data: 'DT_RowIndex',
                         name: 'DT_RowIndex',
+                        orderable: false,
+                        searchable: false,
                     }, {
                         data: 'nama',
                         name: 'nama'
@@ -73,7 +76,9 @@
                     },
                     {
                         data: 'action',
-                        name: 'action'
+                        name: 'action',
+                        orderable: false,
+                        searchable: false,
                     },
                 ],
             });

@@ -64,6 +64,7 @@
                 processing: true,
                 responsive: true,
                 serverSide: true,
+                order: [[3, 'asc']],
                 lengthMenu: [
                     [10, 25, 50, 100, -1],
                     [10, 25, 50, 100, "All"]
@@ -77,6 +78,8 @@
                 columns: [{
                         data: 'DT_RowIndex',
                         name: 'DT_RowIndex',
+                        orderable: false,
+                        searchable: false,
                     },
                     {
                         data: 'kode_bmn',
